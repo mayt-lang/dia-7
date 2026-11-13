@@ -1,44 +1,65 @@
-"""Entidade de usuário e suas regras básicas."""
+"""Entidade Usuário do SaaS e regras de quem usa o sistema."""
+from __future__ import annotations
+from typing import TYPE_CHECKING
 from sqlalchemy import Column, DateTime, Integer, String
 from sqlalchemy.orm import relationship, validates
-
 from app.core.datas import agora_utc
 from app.core.exceptions import ValorInvalido
+from app.core.security import HashDeSenha
 from app.db.database import Base
+from app.models.enums import StatusTarefa
+
+if TYPE_CHECKING:  # só para anotações de tipo; evita importação circular
+    from app.models.tarefa import Tarefa
 
 
 class Usuario(Base):
+    """Usuário do sistema, dono de um conjunto de tarefas."""
     __tablename__ = "usuarios"
 
     id = Column(Integer, primary_key=True, index=True)
     nome = Column(String(120), nullable=False)
-    email = Column(String(180), unique=True, index=True, nullable=False)
-    _senha_hash = Column("senha_hash", String(255), nullable=False)
-    criado_em = Column(DateTime(timezone=True), default=agora_utc, nullable=False)
-    tarefas = relationship("Tarefa", back_populates="usuario", cascade="all, delete-orphan")
+    email = Column(String(180), nullable=False, unique=True, index=True)
+    senha_hash = Column("senha_hash", String(255), nullable=False)
+    criado_em = Column(DateTime(timezone=True), nullable=False, default=agora_utc)
 
-    def __init__(self, *, nome: str, email: str):
+    tarefas = relationship(
+        "Tarefa",
+        back_populates="usuario",
+        cascade="all, delete-orphan",
+    )
+
+    def __init__(self, *, nome: str, email: str) -> None:
+        """Cria um usuário ainda sem senha definida."""
         self.nome = nome
         self.email = self.normalizar_email(email)
 
     @staticmethod
     def normalizar_email(email: str) -> str:
+        """Padroniza o e-mail antes de gravar ou comparar."""
         return email.strip().lower()
 
-    def definir_senha(self, senha: str, hasher) -> None:
-        self._senha_hash = hasher.gerar(senha)
+    def definir_senha(self, senha: str, hasher: HashDeSenha) -> None:
+        """Grava a senha em forma de hash."""
+        self.senha_hash = hasher.gerar(senha)
 
-    def senha_confere(self, senha: str, hasher) -> bool:
-        return hasher.verificar(senha, self._senha_hash)
+    def senha_confere(self, senha: str, hasher: HashDeSenha) -> bool:
+        """Informa se a senha apresentada corresponde à cadastrada."""
+        return hasher.verificar(senha, self.senha_hash)
+
+    def tarefas_pendentes(self) -> list[Tarefa]:
+        """Tarefas do usuário que ainda não foram concluídas."""
+        return [
+            tarefa
+            for tarefa in self.tarefas
+            if tarefa.status is StatusTarefa.PENDENTE
+        ]
 
     @validates("nome")
-    def validar_nome(self, chave, nome: str) -> str:
-        nome_normalizado = nome.strip()
-        if not nome_normalizado:
+    def _validar_nome(self, _campo: str, valor: str) -> str:
+        if not valor or not valor.strip():
             raise ValorInvalido("O nome do usuário não pode ficar vazio.")
-        if len(nome_normalizado) > 120:
-            raise ValorInvalido("O nome deve ter no máximo 120 caracteres.")
-        return nome_normalizado
+        return valor.strip()
 
     def __repr__(self) -> str:
-        return f"Usuario(id={self.id!r}, nome={self.nome!r}, email={self.email!r})"
+        return f"Usuario(id={self.id} email={self.email!r})"

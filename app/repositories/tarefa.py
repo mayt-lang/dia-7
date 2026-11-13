@@ -1,27 +1,128 @@
-
-"""Repositório de persistência das tarefas."""
-
+"""Acesso aos dados de tarefa: filtros e busca."""
 from __future__ import annotations
+from dataclasses import dataclass
+from datetime import date
 
-from app.models.tarefa import Tarefa
+from app.models import Tarefa
+from app.models.enums import PrioridadeTarefa, StatusTarefa
 from app.repositories.base import RepositorioBase
 
 
+@dataclass(frozen=True)
+class FiltroDeTarefas:
+    """Critérios de uma consulta de tarefas.
+
+    Existe para que a assinatura de `TarefaRepositorio.listar` não cresça até
+    oito parâmetros posicionais, e para acrescentar um filtro novo não
+    mude a assinatura de quem a chama.
+    """
+    usuario_id: int
+    status: StatusTarefa | None = None
+    prioridade: PrioridadeTarefa | None = None
+    prazo_ate: date | None = None
+    busca: str | None = None
+
+
 class TarefaRepositorio(RepositorioBase[Tarefa]):
+    """Acesso aos dados de tarefa."""
+
     @property
-    def modelo(self):
+    def modelo(self) -> type[Tarefa]:
         return Tarefa
 
-    def listar(self, usuario_id: int) -> list[Tarefa]:
-        """Lista somente as tarefas do usuário informado.
+    def listar(self, filtro: FiltroDeTarefas) -> list[Tarefa]:
+        """Lista as tarefas de um usuário com os critérios informados.
 
-        O filtro é feito diretamente no banco para não carregar
-        tarefas pertencentes a outros usuários.
+        Os filtros são encadeados: cada critério preenchido acrescenta uma
+        condição ao WHERE. Nenhum critério além do usuario_id devolve todas as
+        tarefas dele, das mais recentes para as mais antigas.
         """
-        return (
-            self._sessao.query(Tarefa)
-            .filter(Tarefa.usuario_id == usuario_id)
-            # O id desempata tarefas criadas no mesmo instante.
-            .order_by(Tarefa.criado_em.desc(), Tarefa.id.desc())
-            .all()
+        consulta = self._sessao.query(Tarefa).filter(
+            Tarefa.usuario_id == filtro.usuario_id
         )
+
+        if filtro.status is not None:
+            consulta = consulta.filter(
+                Tarefa.status == filtro.status.value
+            )
+
+        if filtro.prioridade is not None:
+            consulta = consulta.filter(
+                Tarefa.prioridade == filtro.prioridade.value
+            )
+
+        if filtro.prazo_ate is not None:
+            consulta = consulta.filter(
+                Tarefa.prazo.isnot(None), Tarefa.prazo <= filtro.prazo_ate
+            )
+
+        if filtro.busca:
+            consulta = consulta.filter(
+                Tarefa.titulo.ilike(f"%{filtro.busca}%")
+            )
+
+        return consulta.order_by(Tarefa.criado_em.desc(), Tarefa.id.desc()).all()
+    """Acesso aos dados de tarefa: filtros e busca."""
+from __future__ import annotations
+from dataclasses import dataclass
+from datetime import date
+
+from app.models import Tarefa
+from app.models.enums import PrioridadeTarefa, StatusTarefa
+from app.repositories.base import RepositorioBase
+
+
+@dataclass(frozen=True)
+class FiltroDeTarefas:
+    """Critérios de uma consulta de tarefas.
+
+    Existe para que a assinatura de `TarefaRepositorio.listar` não cresça até
+    oito parâmetros posicionais, e para acrescentar um filtro novo não
+    mude a assinatura de quem a chama.
+    """
+    usuario_id: int
+    status: StatusTarefa | None = None
+    prioridade: PrioridadeTarefa | None = None
+    prazo_ate: date | None = None
+    busca: str | None = None
+
+
+class TarefaRepositorio(RepositorioBase[Tarefa]):
+    """Acesso aos dados de tarefa."""
+
+    @property
+    def modelo(self) -> type[Tarefa]:
+        return Tarefa
+
+    def listar(self, filtro: FiltroDeTarefas) -> list[Tarefa]:
+        """Lista as tarefas de um usuário com os critérios informados.
+
+        Os filtros são encadeados: cada critério preenchido acrescenta uma
+        condição ao WHERE. Nenhum critério além do usuario_id devolve todas as
+        tarefas dele, das mais recentes para as mais antigas.
+        """
+        consulta = self._sessao.query(Tarefa).filter(
+            Tarefa.usuario_id == filtro.usuario_id
+        )
+
+        if filtro.status is not None:
+            consulta = consulta.filter(
+                Tarefa.status == filtro.status.value
+            )
+
+        if filtro.prioridade is not None:
+            consulta = consulta.filter(
+                Tarefa.prioridade == filtro.prioridade.value
+            )
+
+        if filtro.prazo_ate is not None:
+            consulta = consulta.filter(
+                Tarefa.prazo.isnot(None), Tarefa.prazo <= filtro.prazo_ate
+            )
+
+        if filtro.busca:
+            consulta = consulta.filter(
+                Tarefa.titulo.ilike(f"%{filtro.busca}%")
+            )
+
+        return consulta.order_by(Tarefa.criado_em.desc(), Tarefa.id.desc()).all()

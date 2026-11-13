@@ -1,3 +1,4 @@
+
 """Provedores de dependência: montam os objetos que as rotas usam."""
 from typing import Annotated
 
@@ -41,7 +42,10 @@ ServicoUsuario = Annotated[UsuarioServico, Depends(obter_usuario_servico)]
 
 
 def obter_usuario_atual(
-    credenciais: Annotated[HTTPAuthorizationCredentials | None, Depends(_esquema_bearer)],
+    credenciais: Annotated[
+        HTTPAuthorizationCredentials | None,
+        Depends(_esquema_bearer)
+    ],
     servico: ServicoUsuario,
 ) -> Usuario:
     if credenciais is None or credenciais.scheme.lower() != "bearer":
